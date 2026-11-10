@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>链存 · 连锁补货原型</title>
+<style>
+  :root {
+    --bg: #f4f4f2;
+    --surface: #fff;
+    --ink: #1c1917;
+    --muted: #57534e;
+    --line: #e7e5e4;
+    --sidebar: #1c1917;
+    --accent: #0f766e;
+    --bad: #9f1239;
+    --bad-bg: #fff1f2;
+    --warn: #92400e;
+    --warn-bg: #fffbeb;
+    --over: #1e3a8a;
+    --over-bg: #eff6ff;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+    --sel: #f0fdfa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  h1 { font-size: 22px; line-height: 1.25; margin: 0; font-weight: 650; }
+  h2 { font-size: 18px; margin: 22px 0 8px; font-weight: 650; }
+  h3 { font-size: 15px; margin: 0 0 6px; font-weight: 650; }
+  p { margin: 0; }
+  .shell { display: flex; min-height: 100vh; min-width: 1180px; }
+  .side {
+    width: 212px;
+    flex: none;
+    background: var(--sidebar);
+    color: #e7e5e4;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 12px 14px;
+  }
+  .brand strong { display: block; color: #fff; font-size: 18px; letter-spacing: 0.06em; }
+  .brand span { display: block; margin-top: 2px; color: #a8a29e; font-size: 12px; }
+  .nav-label { margin: 16px 8px 4px; font-size: 11px; color: #78716c; }
+  .side button.nav {
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: #d6d3d1;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .side button.nav.on { background: #292524; color: #fff; }
+  .badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 99px;
+    background: var(--bad);
+    color: #fff;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .side .foot { margin-top: auto; padding: 12px 8px 0; color: #78716c; font-size: 12px; }
+  .workspace { flex: 1; min-width: 0; }
+  .top {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-end;
+    padding: 18px 22px 12px;
+  }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .page { padding: 0 22px 40px; }
+  .actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.small { height: 28px; padding: 0 8px; font-size: 12px; }
+  .linkish {
+    border: 0;
+    background: none;
+    color: var(--accent);
+    padding: 0;
+    text-align: left;
+  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .stat b {
+    display: block;
+    font-size: 26px;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .stat.hot b { color: var(--bad); }
+  .note {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: var(--warn-bg);
+    border-left: 3px solid #d97706;
+    font-size: 13px;
+  }
+  .cols { display: grid; grid-template-columns: 1.45fr 0.8fr; gap: 14px; margin-top: 14px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  .pad { padding: 12px 14px; }
+  .headrow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .headrow span, .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.sel td { background: var(--sel); }
+  .rules { margin: 0; padding-left: 18px; }
+  .rules li { margin: 6px 0; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 13px; }
+  .bar-name { width: 72px; flex: none; }
+  .track { flex: 1; height: 8px; background: #e7e5e4; border-radius: 99px; overflow: hidden; }
+  .fill { display: block; height: 100%; background: #a8a29e; }
+  .fill.bad { background: var(--bad); }
+  .fill.warn { background: #b45309; }
+  .fill.over { background: var(--over); }
+  .bar-val { width: 168px; flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .split { display: flex; gap: 14px; align-items: flex-start; }
+  .grow { flex: 1; min-width: 0; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .drawer {
+    width: 332px;
+    flex: none;
+    position: sticky;
+    top: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .drawer h3 { font-size: 16px; }
+  .verdict { font-size: 14px; font-weight: 650; margin-bottom: 8px; }
+  .calc { margin: 8px 0 0; padding-left: 18px; }
+  .calc li { margin: 4px 0; }
+  .drawer .row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  .qty {
+    width: 88px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0 8px;
+    background: #fff;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 99px;
+    font-size: 12px;
+    background: #f5f5f4;
+    color: #44403c;
+    white-space: nowrap;
+  }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.over { background: var(--over-bg); color: var(--over); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .heat td, .heat th.num { text-align: center; }
+  .heat td { padding: 0; }
+  .heat button.cell {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 10px 0;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .heat td.bad { background: var(--bad-bg); }
+  .heat td.bad button { color: var(--bad); }
+  .heat td.warn { background: var(--warn-bg); }
+  .heat td.warn button { color: var(--warn); }
+  .heat td.over { background: var(--over-bg); }
+  .heat td.over button { color: var(--over); }
+  .heat td.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .stage { display: flex; gap: 28px; align-items: flex-start; }
+  .guide { width: 280px; }
+  .guide ol { margin: 8px 0 0; padding-left: 18px; }
+  .guide li { margin: 6px 0; }
+  select.store-pick { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: #fff; margin: 8px 0 12px; }
+  .phone {
+    width: 360px;
+    height: 740px;
+    border: 10px solid #1c1917;
+    border-radius: 32px;
+    background: #fafaf9;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .phone-bar {
+    height: 42px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 12px;
+    color: #44403c;
+    border-bottom: 1px solid var(--line);
+    background: #fff;
+  }
+  .phone-scroll { flex: 1; overflow: auto; padding: 4px 16px 20px; }
+  .task { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .task-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .task p { margin-top: 6px; color: var(--muted); font-size: 13px; }
+  .task .row-actions { margin-top: 8px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+  .flow span { color: var(--muted); }
+  .mod { margin-top: 8px; }
+  .mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(28, 25, 23, 0.45);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+    z-index: 20;
+  }
+  .sheet {
+    width: min(920px, 100%);
+    background: #fff;
+    border-radius: 12px;
+    max-height: calc(100vh - 80px);
+    overflow: auto;
+  }
+  .toast {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1c1917;
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 30;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+
+const CATS = ["饮料", "乳品", "方便食品", "纸品", "粮油", "低温"];
+const STORE_ORDER = ["dxc", "gtz", "wanda", "rml", "bj", "kjy", "zsl", "lc"];
+const STORES = {
+  dxc: { name: "大学城店", region: "城西", stale: 2 },
+  gtz: { name: "高铁站店", region: "城北", stale: 1 },
+  wanda: { name: "万达店", region: "城东", stale: 3 },
+  rml: { name: "人民路店", region: "城中", stale: 4 },
+  bj: { name: "滨江店", region: "城南", stale: 2 },
+  kjy: { name: "科技园店", region: "城西", stale: 1 },
+  zsl: { name: "中山路店", region: "城中", stale: 5 },
+  lc: { name: "老城店", region: "城南", stale: 23 }
+};
+const SKUS = {
+  water: { name: "农夫山泉 550ml", unit: "瓶", case: 24, cat: "饮料", price: 2 },
+  coke: { name: "可口可乐 330ml", unit: "听", case: 24, cat: "饮料", price: 2.8 },
+  milk: { name: "伊利纯牛奶 250ml", unit: "盒", case: 16, cat: "乳品", price: 3.2 },
+  noodle: { name: "康师傅红烧牛肉面", unit: "桶", case: 12, cat: "方便食品", price: 4.5 },
+  vida: { name: "维达抽纸 3层130抽", unit: "提", case: 8, cat: "纸品", price: 12.9 },
+  oil: { name: "金龙鱼玉米油 5L", unit: "桶", case: 4, cat: "粮油", price: 69.9 },
+  yogurt: { name: "蒙牛风味酸奶 100g", unit: "杯", case: 24, cat: "低温", price: 2.5 },
+  cookie: { name: "奥利奥原味 97g", unit: "盒", case: 12, cat: "方便食品", price: 9.9 }
+};
+const SAMPLE = {
+  饮料: "饮料",
+  乳品: "常温奶",
+  方便食品: "方便面",
+  纸品: "抽纸",
+  粮油: "食用油",
+  低温: "酸奶"
+};
+const FROM = {
+  "rml|water": { onHand: 220, daily: 10 },
+  "rml|noodle": { onHand: 80, daily: 4 },
+  "lc|vida": { onHand: 240, daily: 0.8 }
+};
+const ROWS = [
+  { id: "t1", store: "dxc", sku: "water", onHand: 24, reserved: 0, transit: 0, daily: 18, source: "transfer", from: "rml", dcOnHand: 860 },
+  { id: "t2", store: "gtz", sku: "water", onHand: 30, reserved: 0, transit: 0, daily: 16, source: "transfer", from: "rml", dcOnHand: 860 },
+  { id: "t3", store: "dxc", sku: "noodle", onHand: 6, reserved: 0, transit: 0, daily: 5.5, source: "transfer", from: "rml", dcOnHand: 8 },
+  { id: "t4", store: "zsl", sku: "vida", onHand: 4, reserved: 0, transit: 0, daily: 3.2, source: "transfer", from: "lc", dcOnHand: 120 },
+  { id: "t5", store: "wanda", sku: "milk", onHand: 20, reserved: 0, transit: 16, daily: 7, source: "covered", from: "", dcOnHand: 0 },
+  { id: "t6", store: "kjy", sku: "oil", onHand: 2, reserved: 0, transit: 0, daily: 0.4, source: "supplier", from: "", dcOnHand: 0 },
+  { id: "t7", store: "dxc", sku: "coke", onHand: 10, reserved: 0, transit: 0, daily: 9, source: "dc", from: "", dcOnHand: 24 },
+  { id: "t8", store: "gtz", sku: "coke", onHand: 12, reserved: 0, transit: 0, daily: 8, source: "dc", from: "", dcOnHand: 24 }
+];
+const OVER = [
+  { store: "lc", sku: "vida", onHand: 240, daily: 0.8 },
+  { store: "rml", sku: "oil", onHand: 80, daily: 0.25 },
+  { store: "lc", sku: "cookie", onHand: 360, daily: 1.2 },
+  { store: "rml", sku: "water", onHand: 220, daily: 10 }
+];
+const ANOM = [
+  { store: "wanda", sku: "cookie", today: 48, daily: 6, note: "先确认是不是团购或录错单。今天不改日均，也不追加建议量。" }
+];
+const EXP = [
+  { store: "bj", sku: "yogurt", onHand: 36, expiring: 18, daysLeft: 6, daily: 4 }
+];
+const SHORT = {
+  "lc|方便食品": { name: "康师傅红烧牛肉面", onHand: 60, daily: 4, note: "格子用这个最短天数。奥利奥超储在预警里。" },
+  "rml|粮油": { name: "鲁花花生油 5L", onHand: 36, daily: 3, note: "格子用这个最短天数。金龙鱼滞销在预警里。" }
+};
+const MATRIX = {
+  dxc: { 饮料: 10 / 9, 乳品: 4.6, 方便食品: 6 / 5.5, 纸品: 6, 粮油: 9, 低温: 5 },
+  gtz: { 饮料: 12 / 8, 乳品: 3.6, 方便食品: 4.3, 纸品: 5.2, 粮油: 8, 低温: 4.2 },
+  wanda: { 饮料: 6.2, 乳品: 20 / 7, 方便食品: 7, 纸品: 8, 粮油: 11, 低温: 6 },
+  rml: { 饮料: 22, 乳品: 12, 方便食品: 20, 纸品: 11, 粮油: 12, 低温: 9 },
+  bj: { 饮料: 5, 乳品: 4.4, 方便食品: 6, 纸品: 7.5, 粮油: 10, 低温: 9 },
+  kjy: { 饮料: 4.2, 乳品: 5, 方便食品: 6.4, 纸品: 8, 粮油: 5, 低温: 7 },
+  zsl: { 饮料: 4.8, 乳品: 4, 方便食品: 3.5, 纸品: 4 / 3.2, 粮油: 11, 低温: 6 },
+  lc: { 饮料: 8, 乳品: 9, 方便食品: 15, 纸品: 300, 粮油: 18, 低温: 12 }
+};
+const DEFAULT_CONFIG = {
+  饮料: { lead: 1, safety: 2 },
+  乳品: { lead: 1, safety: 3 },
+  方便食品: { lead: 1, safety: 2 },
+  纸品: { lead: 1, safety: 2 },
+  粮油: { lead: 7, safety: 3 },
+  低温: { lead: 1, safety: 2 }
+};
+const FEATURES = [
+  ["一期", "今日总览", "开班作战台", "总部运营", "home", "断货门店数、可执行条数、调拨条数、滞销金额，并标明日配截单时间。"],
+  ["一期", "今日总览", "不足 2 天清单", "总部运营", "home", "在店可售不足 2 天的门店和商品，点名称进入建议单。"],
+  ["一期", "今日总览", "处理顺序", "总部运营", "home", "先店间调拨，再把总仓现货按最短可售分配；异常销量不进建议。"],
+  ["一期", "门店可售", "门店×品类矩阵", "总部运营", "matrix", "格子是该店该品类的在店最短可售天数，不含在途。"],
+  ["一期", "门店可售", "格子下钻", "总部运营", "matrix", "看到具体商品、在途覆盖和今天补不补。临期不改变格子颜色。"],
+  ["一期", "补货建议", "建议量", "总部采购", "replenish", "目标天数 × 日均 − 在店可售 − 在途，再按箱规向上取整。"],
+  ["一期", "补货建议", "计算过程", "总部采购", "replenish", "每一行展开日均、目标、缺口、箱规、总仓或调出店约束。"],
+  ["一期", "补货建议", "总仓分配", "总部采购", "replenish", "同一商品多家要货时，现货先给在店可售更短的店。"],
+  ["一期", "补货建议", "确认、改量、暂缓", "总部、店长", "replenish", "暂缓会释放已占的总仓或可调数量。确认后进入配货草稿。"],
+  ["一期", "补货建议", "配货草稿", "总部采购", "replenish", "草稿分调拨、总仓配送、供应商直送，交给现有进销存执行。"],
+  ["一期", "店间调拨", "富余店补缺口店", "总部运营", "transfer", "只补缺口，调出后仍留下至少 14 天用量。"],
+  ["一期", "店间调拨", "连续调出扣减", "总部运营", "transfer", "同一家店同一商品按清单顺序扣减，并显示调出前后可售天数。"],
+  ["一期", "店间调拨", "未盘点提示", "总部运营", "transfer", "调出店超过 21 天未盘点时，出库前先复盘。"],
+  ["一期", "预警", "缺货", "总部、店长", "alerts", "在店可售不足 2 天。"],
+  ["一期", "预警", "超储与滞销", "总部运营", "alerts", "可售达到 21 天为超储，达到 60 天为滞销，并给出库存金额。"],
+  ["一期", "预警", "异常销量", "总部、店长", "alerts", "当日销量达到日均数倍时，不改日均，不自动加补。"],
+  ["一期", "预警", "临期", "店长", "alerts", "到期前按日均卖不完的数量单独列出，建议堆头而不是补货。"],
+  ["一期", "预警", "超期未盘点", "总部、店长", "alerts", "超过 21 天未盘点的门店。"],
+  ["一期", "店长端", "只看本店", "店长", "store", "调出、调入、总仓配送、直送和本店预警。看不到其他店的库存明细。"],
+  ["一期", "店长端", "改数量回写", "店长", "store", "店长确认或暂缓的结果，写回总部同一条建议。"],
+  ["一期", "参数", "配送周期和安全天数", "总部运营", "params", "按品类配置。保存后按新目标天数重算今日建议。"],
+  ["一期", "参数", "箱规", "总部运营", "params", "取整使用商品主数据里的箱规。"],
+  ["一期", "数据", "库存与销售接入", "实施", "", "对接 POS 或进销存的日终库存、销售和在途。演示数据相当于已经接好的 10 月 9 日。"],
+  ["二期", "参数", "档期系数", "总部运营", "", "促销和周末按品类乘到日均上。一期的日均不含档期系数。"],
+  ["二期", "复盘", "建议准确率", "总部运营", "", "对比建议量、实发量，以及之后 3 天有没有断货。"],
+  ["二期", "权限", "区域经理", "区域", "", "只看本区门店。"],
+  ["二期", "消息", "企业微信送达", "店长", "", "把店长端清单推到企业微信，确认动作与手机页相同。"],
+  ["二期", "规则", "新品观察期", "总部运营", "", "新品前 14 天不判滞销。"],
+  ["二期", "规则", "总部锁库存", "总部运营", "", "活动预留库存不参与分配。"]
+];
+
+const params = new URLSearchParams(location.search);
+const allowed = new Set(["home", "replenish", "transfer", "matrix", "alerts", "store", "params", "list"]);
+const state = {
+  screen: allowed.has(params.get("screen")) ? params.get("screen") : "home",
+  filter: "todo",
+  selected: null,
+  cell: null,
+  alertTab: ["stockout", "over", "anom", "expiry", "count"].includes(params.get("tab")) ? params.get("tab") : "stockout",
+  managerStore: "dxc",
+  modal: false,
+  toast: "",
+  decisions: {},
+  config: JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+};
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function n1(n) {
+  return Number(n).toLocaleString("zh-CN", { maximumFractionDigits: 1 });
+}
+function n0(n) {
+  return Math.round(Number(n)).toLocaleString("zh-CN");
+}
+function money(n) {
+  return "¥" + Number(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function heat(dos) {
+  if (dos < 2) return "bad";
+  if (dos < 4) return "warn";
+  if (dos >= 21) return "over";
+  return "";
+}
+function sourceName(p) {
+  if (p.source === "transfer") return "店间调拨";
+  if (p.source === "dc") return "总仓配送";
+  if (p.source === "supplier") return "供应商直送";
+  return "在途已覆盖";
+}
+function statusMeta(p) {
+  if (p.status === "confirmed") return ["已确认", "ok"];
+  if (p.status === "hold") return ["已暂缓", ""];
+  if (p.blocked) return ["总仓不足", "bad"];
+  if (p.execQty === 0 && p.suggest === 0) return ["不必补", ""];
+  if (p.execQty === 0) return ["未分配", "bad"];
+  return ["待确认", "warn"];
+}
+function inFilter(p, f) {
+  if (f === "transfer") return p.source === "transfer";
+  if (f === "dc") return p.source === "dc";
+  if (f === "supplier") return p.source === "supplier";
+  return p.source !== "covered";
+}
+
+function build() {
+  const plans = ROWS.map((raw) => {
+    const sku = Object.assign({ id: raw.sku }, SKUS[raw.sku]);
+    const cfg = state.config[sku.cat];
+    const sellable = raw.onHand - raw.reserved;
+    const cover = sellable + raw.transit;
+    const targetDays = cfg.lead + cfg.safety;
+    const targetQty = targetDays * raw.daily;
+    const gap = Math.max(0, targetQty - cover);
+    const suggest = gap === 0 ? 0 : Math.ceil((gap - 1e-9) / sku.case) * sku.case;
+    const d = state.decisions[raw.id];
+    const stored = d && d.qty != null ? Number(d.qty) : suggest;
+    const request = d && d.status === "hold" ? 0 : stored;
+    return {
+      ...raw,
+      sku,
+      cfg,
+      sellable,
+      cover,
+      targetDays,
+      targetQty,
+      gap,
+      suggest,
+      dos: raw.daily ? sellable / raw.daily : 0,
+      dosAll: raw.daily ? cover / raw.daily : 0,
+      stored,
+      request,
+      status: raw.source === "covered" ? "covered" : (d ? d.status : "pending"),
+      execQty: 0,
+      stepMax: 0,
+      blocked: false
+    };
+  });
+
+  const dcGroups = {};
+  plans.forEach((p) => {
+    if (p.source === "dc") (dcGroups[p.sku.id] || (dcGroups[p.sku.id] = [])).push(p);
+  });
+  Object.keys(dcGroups).forEach((id) => {
+    const list = dcGroups[id].slice().sort((a, b) => a.dos - b.dos || a.id.localeCompare(b.id));
+    let left = list[0].dcOnHand;
+    list.forEach((p) => {
+      const caseSize = p.sku.case;
+      p.stepMax = Math.floor(left / caseSize) * caseSize;
+      const give = Math.min(Math.max(0, p.request), p.stepMax);
+      p.execQty = Math.floor(give / caseSize) * caseSize;
+      left -= p.execQty;
+      p.blocked = p.suggest > 0 && p.execQty === 0 && p.status !== "hold";
+    });
+  });
+
+  const pool = {};
+  plans.forEach((p) => {
+    if (p.source !== "transfer") return;
+    const key = p.from + "|" + p.sku.id;
+    const base = FROM[key];
+    if (pool[key] == null) pool[key] = base.onHand;
+    const caseSize = p.sku.case;
+    const maxGive = Math.max(0, Math.floor((pool[key] - 14 * base.daily) / caseSize) * caseSize);
+    p.stepMax = maxGive;
+    const give = Math.min(Math.max(0, p.request), maxGive);
+    p.execQty = Math.floor(give / caseSize) * caseSize;
+    p.fromBefore = pool[key];
+    pool[key] -= p.execQty;
+    p.fromAfter = pool[key];
+    p.fromDaily = base.daily;
+    p.fromDosBefore = p.fromBefore / base.daily;
+    p.fromDosAfter = p.fromAfter / base.daily;
+  });
+
+  plans.forEach((p) => {
+    if (p.source === "supplier") {
+      p.stepMax = p.suggest;
+      const give = Math.min(Math.max(0, p.request), p.stepMax);
+      p.execQty = Math.floor(give / p.sku.case) * p.sku.case;
+    }
+    if (p.source === "covered") {
+      p.stepMax = 0;
+      p.execQty = 0;
+    }
+  });
+  return plans;
+}
+
+function shownQty(p) {
+  if (p.status === "hold") return p.stored;
+  return p.execQty;
+}
+
+function verdict(p) {
+  const u = p.sku.unit;
+  if (p.source === "covered") {
+    return "在途已经盖住目标库存，今天不补。";
+  }
+  if (p.status === "hold") {
+    return "这条已暂缓，不占用可调数量，也不进配货草稿。";
+  }
+  if (p.blocked) {
+    return "总仓现货已经分给可售更短的门店，本店今天分配到 0。";
+  }
+  if (p.source === "transfer") {
+    return "从" + STORES[p.from].name + "调入 " + n0(p.execQty) + " " + u + "。调出后对方还有 " + n1(p.fromDosAfter) + " 天。";
+  }
+  if (p.source === "dc") {
+    return "总仓配送 " + n0(p.execQty) + " " + u + "。";
+  }
+  return "供应商直送 " + n0(p.execQty) + " " + u + "。交期 " + p.cfg.lead + " 天已经算进目标天数。";
+}
+
+function explain(p, plans) {
+  const u = p.sku.unit;
+  const lines = [
+    "在店可售 " + n0(p.sellable) + " " + u + "（账面 " + n0(p.onHand) + " − 占用 " + n0(p.reserved) + "）",
+    "在途 " + n0(p.transit) + " " + u + "，含在途可售 " + n1(p.dosAll) + " 天",
+    "日均 " + n1(p.daily) + " " + u + "。近 7 天占 50%，14 天占 30%，28 天占 20%，异常日已剔除",
+    "在店可售 " + n1(p.dos) + " 天",
+    "目标天数 = 配送 " + p.cfg.lead + " 天 + 安全 " + p.cfg.safety + " 天 = " + p.targetDays + " 天",
+    "目标量 " + n1(p.targetQty) + " " + u + "，缺口 " + n1(p.gap) + " " + u,
+    "箱规 " + p.sku.case + "，取整后建议 " + n0(p.suggest) + " " + u
+  ];
+  if (p.source === "transfer") {
+    lines.push("调出前，" + STORES[p.from].name + "有 " + n0(p.fromBefore) + " " + u + "，可售 " + n1(p.fromDosBefore) + " 天");
+    lines.push("本条执行 " + n0(p.execQty) + " " + u + " 后，剩 " + n0(p.fromAfter) + " " + u + "，可售 " + n1(p.fromDosAfter) + " 天");
+    lines.push("调出后至少保留 14 天用量，本条可调上限 " + n0(p.stepMax) + " " + u);
+    if (p.dcOnHand < p.suggest) {
+      lines.push("总仓现货 " + n0(p.dcOnHand) + " " + u + "，不够取整后的 " + n0(p.suggest) + " " + u + "，所以走调拨");
+    } else {
+      lines.push("总仓有 " + n0(p.dcOnHand) + " " + u + "。调出店可售超过 14 天，今天先调拨");
+    }
+    if (STORES[p.from].stale >= 21) {
+      lines.push(STORES[p.from].name + "已 " + STORES[p.from].stale + " 天未盘点，出库前先复盘");
+    }
+  }
+  if (p.source === "dc") {
+    const siblings = plans.filter((x) => x.source === "dc" && x.sku.id === p.sku.id).sort((a, b) => a.dos - b.dos);
+    const rank = siblings.findIndex((x) => x.id === p.id) + 1;
+    lines.push("总仓现货 " + n0(p.dcOnHand) + " " + u + "，按在店可售从短到长分配，本店排第 " + rank);
+    lines.push("分到本店时的可分配上限 " + n0(p.stepMax) + " " + u + "，执行 " + n0(p.execQty) + " " + u);
+  }
+  if (p.source === "supplier") {
+    lines.push("总仓不备这个商品，向供应商直送");
+  }
+  if (p.source === "covered") {
+    lines.push("在店加在途已经达到目标量，执行量为 0");
+  }
+  return lines;
+}
+
+function categoryMins() {
+  return CATS.map((cat) => {
+    let store = STORE_ORDER[0];
+    let dos = MATRIX[store][cat];
+    STORE_ORDER.forEach((id) => {
+      if (MATRIX[id][cat] < dos) {
+        dos = MATRIX[id][cat];
+        store = id;
+      }
+    });
+    return { cat, store, dos };
+  }).sort((a, b) => a.dos - b.dos);
+}
+
+function overValue(minDos) {
+  return OVER.reduce((sum, o) => {
+    const dos = o.onHand / o.daily;
+    if (dos >= minDos) return sum + o.onHand * SKUS[o.sku].price;
+    return sum;
+  }, 0);
+}
+
+function dcNotes(plans) {
+  return plans.filter((p) => p.blocked).map((b) => {
+    const winner = plans.find((p) => p.sku.id === b.sku.id && p.source === "dc" && p.execQty > 0);
+    const got = winner
+      ? STORES[winner.store].name + "分到 " + n0(winner.execQty) + " " + b.sku.unit
+      : "没有门店分到货";
+    return b.sku.name + "总仓现货 " + n0(b.dcOnHand) + " " + b.sku.unit + "，" + got + "。" + STORES[b.store].name + "可售 " + n1(b.dos) + " 天，今天分配为 0。";
+  });
+}
+
+function cellDetail(store, cat, plans) {
+  const lines = [];
+  plans.filter((p) => p.store === store && p.sku.cat === cat).forEach((p) => {
+    const transit = p.transit ? "，在途 " + n0(p.transit) + p.sku.unit + "，含在途 " + n1(p.dosAll) + " 天" : "";
+    lines.push(p.sku.name + "：在店 " + n0(p.sellable) + p.sku.unit + transit + "，可售 " + n1(p.dos) + " 天，执行 " + n0(p.execQty) + p.sku.unit + "（" + sourceName(p) + "）");
+  });
+  const short = SHORT[store + "|" + cat];
+  if (short) {
+    lines.push(short.name + "：在店 " + n0(short.onHand) + "，日均 " + n1(short.daily) + "，可售 " + n1(short.onHand / short.daily) + " 天。" + short.note);
+  }
+  plans.filter((p) => p.source === "transfer" && p.from === store && p.sku.cat === cat).forEach((p) => {
+    lines.push(p.sku.name + "：调出前 " + n0(p.fromBefore) + p.sku.unit + "，可售 " + n1(p.fromDosBefore) + " 天。调给" + STORES[p.store].name + " " + n0(p.execQty) + p.sku.unit + "后，剩 " + n1(p.fromDosAfter) + " 天。");
+  });
+  OVER.filter((o) => o.store === store && SKUS[o.sku].cat === cat).forEach((o) => {
+    const sku = SKUS[o.sku];
+    const dos = o.onHand / o.daily;
+    const text = sku.name + "：在店 " + n0(o.onHand) + sku.unit + "，可售 " + n1(dos) + " 天，金额 " + money(o.onHand * sku.price) + "。" + (dos >= 60 ? "滞销。" : "刚过 21 天超储线。");
+    if (!lines.some((l) => l.indexOf(sku.name + "：") === 0)) lines.push(text);
+  });
+  EXP.filter((a) => a.store === store && SKUS[a.sku].cat === cat).forEach((a) => {
+    const sku = SKUS[a.sku];
+    lines.push(sku.name + "：在店 " + n0(a.onHand) + sku.unit + "，其中 " + a.expiring + sku.unit + " 将在 " + a.daysLeft + " 天内到期。日均 " + n1(a.daily) + "，大约 " + n1(a.expiring / a.daily) + " 天能卖完。建议堆头，不要补货。");
+  });
+  if (!lines.length) {
+    lines.push(SAMPLE[cat] + "：该品类在店最短可售 " + n1(MATRIX[store][cat]) + " 天。");
+  }
+  return lines;
+}
+
+function pageHome(plans) {
+  const risks = plans.filter((p) => p.dos < 2).sort((a, b) => a.dos - b.dos);
+  const riskStores = new Set(risks.map((p) => p.store));
+  const executable = plans.filter((p) => p.execQty > 0 && p.status !== "hold");
+  const transfers = executable.filter((p) => p.source === "transfer");
+  const notes = dcNotes(plans);
+  const bars = categoryMins().map((c) => {
+    const h = heat(c.dos);
+    const w = Math.max(4, Math.min(100, (c.dos / 14) * 100));
+    return '<div class="bar-row"><span class="bar-name">' + esc(c.cat) + '</span><span class="track"><span class="fill ' + h + '" style="width:' + w + '%"></span></span><span class="bar-val">' + n1(c.dos) + " 天 · " + esc(STORES[c.store].name) + "</span></div>";
+  }).join("");
+  const riskRows = risks.map((p) => {
+    const sm = statusMeta(p);
+    return "<tr><td>" + esc(STORES[p.store].name) + '</td><td><button class="linkish" data-open="' + p.id + '">' + esc(p.sku.name) + "</button></td><td>" + pill(n1(p.dos) + " 天", heat(p.dos)) + "</td><td>" + esc(sourceName(p)) + "</td><td class=\"num\">" + n0(p.execQty) + " " + esc(p.sku.unit) + "</td><td>" + pill(sm[0], sm[1]) + "</td></tr>";
+  }).join("");
+  return ''
+    + '<div class="stats">'
+    + stat(riskStores.size + " 家", "可售不足 2 天的门店", true)
+    + stat(String(executable.length), "今天可执行", false)
+    + stat(String(transfers.length), "店间调拨", false)
+    + stat(money(overValue(60)), "滞销库存（可售 ≥ 60 天）", false)
+    + "</div>"
+    + (notes.length ? '<div class="note">' + esc(notes.join("")) + "</div>" : "")
+    + '<div class="cols"><div class="panel"><div class="pad headrow"><strong>不足 2 天</strong><span>' + risks.length + ' 条</span></div><table><thead><tr><th>门店</th><th>商品</th><th>在店可售</th><th>方式</th><th class="num">执行量</th><th>状态</th></tr></thead><tbody>' + riskRows + "</tbody></table></div>"
+    + '<div class="panel"><div class="pad"><strong>今天的处理顺序</strong><ol class="rules"><li>在店可售不足 2 天的，先从富余店调拨。</li><li>调出后，对方至少留下 14 天用量。</li><li>还缺的部分用总仓现货，按可售天数从短到长分。</li><li>总仓不备的商品，开供应商直送，交期算进目标天数。</li><li>当天销量突然放大的，先确认原因，不改日均。</li></ol></div></div></div>'
+    + '<div class="panel" style="margin-top:14px"><div class="pad headrow"><strong>各品类最短可售天数</strong><span>8 店里的最低值 · 不含在途</span></div><div class="pad">' + bars + "</div></div>";
+}
+
+function stat(value, label, hot) {
+  return '<div class="stat' + (hot ? " hot" : "") + '"><b>' + esc(value) + "</b><span>" + esc(label) + "</span></div>";
+}
+function pill(text, tone) {
+  return '<span class="pill ' + (tone || "") + '">' + esc(text) + "</span>";
+}
+
+function pageReplenish(plans) {
+  const filters = [
+    ["todo", "要处理"],
+    ["transfer", "调拨"],
+    ["dc", "总仓"],
+    ["supplier", "直送"],
+    ["covered", "不必补"]
+  ];
+  const chips = filters.map(([id, name]) => {
+    const n = plans.filter((p) => id === "covered" ? p.source === "covered" : inFilter(p, id)).length;
+    return '<button class="btn small' + (state.filter === id ? " on" : "") + '" data-filter="' + id + '">' + name + " " + n + "</button>";
+  }).join("");
+  const rows = plans.filter((p) => state.filter === "covered" ? p.source === "covered" : inFilter(p, state.filter));
+  const body = rows.map((p) => {
+    const sm = statusMeta(p);
+    return '<tr class="' + (state.selected === p.id ? "sel" : "") + '"><td>' + esc(STORES[p.store].name) + '</td><td><button class="linkish" data-open="' + p.id + '">' + esc(p.sku.name) + "</button></td><td>" + pill(n1(p.dos) + " 天", heat(p.dos)) + '</td><td class="num">' + n0(p.suggest) + '</td><td class="num">' + n0(p.execQty) + " " + esc(p.sku.unit) + "</td><td>" + esc(sourceName(p)) + "</td><td>" + pill(sm[0], sm[1]) + "</td></tr>";
+  }).join("");
+  const current = plans.find((p) => p.id === state.selected);
+  return '<div class="split"><div class="grow"><div class="filters">' + chips + '</div><div class="panel"><table><thead><tr><th>门店</th><th>商品</th><th>在店可售</th><th class="num">建议</th><th class="num">执行</th><th>方式</th><th>状态</th></tr></thead><tbody>' + body + "</tbody></table></div></div>" + (current ? drawer(current, plans) : "") + "</div>";
+}
+
+function drawer(p, plans) {
+  const sm = statusMeta(p);
+  const lines = explain(p, plans).map((l) => "<li>" + esc(l) + "</li>").join("");
+  const canEdit = p.stepMax > 0;
+  const actions = p.source === "covered"
+    ? ""
+    : '<div class="row-actions"><label>执行 <input class="qty" data-qty="' + p.id + '" type="number" min="0" max="' + p.stepMax + '" step="' + p.sku.case + '" value="' + shownQty(p) + '"' + (p.stepMax === 0 && p.status !== "hold" ? " disabled" : "") + "></label>"
+      + '<button class="btn primary small" data-act="confirm" data-id="' + p.id + '"' + (canEdit ? "" : " disabled") + ">确认</button>"
+      + '<button class="btn small" data-act="hold" data-id="' + p.id + '"' + (p.source === "covered" ? " disabled" : "") + ">暂缓</button>"
+      + (state.decisions[p.id] ? '<button class="btn small" data-act="reset" data-id="' + p.id + '">恢复建议</button>' : "")
+      + "</div>";
+  return '<aside class="drawer"><div class="headrow" style="border:0;padding:0 0 8px"><h3 style="margin:0">' + esc(STORES[p.store].name) + "</h3>" + pill(sm[0], sm[1]) + "</div><p>" + esc(p.sku.name) + '</p><p class="verdict" style="margin-top:8px">' + esc(verdict(p)) + '</p><ul class="calc">' + lines + "</ul>" + actions + '<p class="muted" style="margin-top:10px">金额 ' + money(p.execQty * p.sku.price) + " · 箱规 " + p.sku.case + " " + esc(p.sku.unit) + "</p></aside>";
+}
+
+function pageTransfer(plans) {
+  const rows = plans.filter((p) => p.source === "transfer");
+  const body = rows.map((p) => {
+    const sm = statusMeta(p);
+    const stale = STORES[p.from].stale >= 21 ? pill(STORES[p.from].stale + " 天未盘点", "warn") : "已盘点";
+    return "<tr><td>" + esc(p.sku.name) + "</td><td>" + esc(STORES[p.from].name) + "</td><td class=\"num\">" + n1(p.fromDosBefore) + " → " + n1(p.fromDosAfter) + " 天</td><td class=\"num\">" + n0(p.execQty) + " " + esc(p.sku.unit) + "</td><td>" + esc(STORES[p.store].name) + "</td><td>" + pill(n1(p.dos) + " 天", heat(p.dos)) + "</td><td>" + stale + "</td><td>" + pill(sm[0], sm[1]) + '</td><td><button class="btn small" data-open="' + p.id + '">计算</button></td></tr>';
+  }).join("");
+  return '<p class="sub" style="margin-bottom:10px">调出后至少保留 14 天用量，并按箱规取整。同一调出店按表中顺序扣减。老城店纸品调出后仍然滞销，清库存要另做促销，不在这条调拨里一次出清。</p><div class="panel"><table><thead><tr><th>商品</th><th>调出</th><th class="num">调出前 → 后</th><th class="num">数量</th><th>调入</th><th>调入可售</th><th>盘点</th><th>状态</th><th></th></tr></thead><tbody>' + body + "</tbody></table></div>";
+}
+
+function pageMatrix(plans) {
+  const head = CATS.map((c) => '<th class="num">' + esc(c) + "</th>").join("");
+  const body = STORE_ORDER.map((id) => {
+    const cells = CATS.map((cat) => {
+      const dos = MATRIX[id][cat];
+      const key = id + "|" + cat;
+      const on = state.cell === key ? " on" : "";
+      return '<td class="' + heat(dos) + on + '"><button class="cell" data-cell="' + esc(key) + '">' + n1(dos) + "</button></td>";
+    }).join("");
+    return "<tr><td>" + esc(STORES[id].name) + "<div class=\"muted\">" + esc(STORES[id].region) + "</div></td>" + cells + "</tr>";
+  }).join("");
+  const parts = (state.cell || "dxc|饮料").split("|");
+  const store = parts[0];
+  const cat = parts[1];
+  const lines = cellDetail(store, cat, plans).map((l) => "<li>" + esc(l) + "</li>").join("");
+  return '<div class="legend"><span class="pill bad">不足 2 天</span><span class="pill warn">2–4 天</span><span>4–21 天不着色</span><span class="pill over">21 天及以上</span><button class="linkish" data-go="alerts" data-tab="expiry">临期不改变格子颜色，去预警看滨江酸奶</button></div>'
+    + '<div class="split"><div class="grow panel"><table class="heat"><thead><tr><th>门店</th>' + head + "</tr></thead><tbody>" + body + '</tbody></table></div><aside class="drawer"><h3>' + esc(STORES[store].name) + " · " + esc(cat) + '</h3><p class="muted">格子上的 ' + n1(MATRIX[store][cat]) + ' 天，是这个品类今早的最短在店可售，不含在途。</p><ul class="calc">' + lines + "</ul></aside></div>";
+}
+
+function pageAlerts(plans) {
+  const tabs = [
+    ["stockout", "缺货"],
+    ["over", "超储"],
+    ["anom", "异常销量"],
+    ["expiry", "临期"],
+    ["count", "未盘点"]
+  ];
+  const bar = tabs.map(([id, name]) => '<button class="btn small' + (state.alertTab === id ? " on" : "") + '" data-tab="' + id + '">' + name + "</button>").join("");
+  let table = "";
+  if (state.alertTab === "stockout") {
+    const rows = plans.filter((p) => p.dos < 2).sort((a, b) => a.dos - b.dos).map((p) => "<tr><td>" + esc(STORES[p.store].name) + "</td><td>" + esc(p.sku.name) + "</td><td>" + pill(n1(p.dos) + " 天", "bad") + "</td><td>" + esc(sourceName(p)) + '</td><td class="num">' + n0(p.execQty) + " " + esc(p.sku.unit) + '</td><td><button class="linkish" data-open="' + p.id + '">打开建议</button></td></tr>').join("");
+    table = "<table><thead><tr><th>门店</th><th>商品</th><th>在店可售</th><th>今天怎么处理</th><th class=\"num\">执行量</th><th></th></tr></thead><tbody>" + rows + "</tbody></table>";
+  } else if (state.alertTab === "over") {
+    const rows = OVER.map((o) => {
+      const sku = SKUS[o.sku];
+      const dos = o.onHand / o.daily;
+      const kind = dos >= 60 ? "滞销" : "刚过线";
+      return "<tr><td>" + esc(STORES[o.store].name) + "</td><td>" + esc(sku.name) + "</td><td>" + pill(n1(dos) + " 天", "over") + "</td><td class=\"num\">" + n0(o.onHand) + " " + esc(sku.unit) + "</td><td class=\"num\">" + money(o.onHand * sku.price) + "</td><td>" + kind + "</td></tr>";
+    }).join("");
+    table = "<table><thead><tr><th>门店</th><th>商品</th><th>可售</th><th class=\"num\">库存</th><th class=\"num\">金额</th><th>类型</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  } else if (state.alertTab === "anom") {
+    const rows = ANOM.map((a) => {
+      const sku = SKUS[a.sku];
+      return "<tr><td>" + esc(STORES[a.store].name) + "</td><td>" + esc(sku.name) + "</td><td class=\"num\">" + n0(a.today) + "</td><td class=\"num\">" + n1(a.daily) + "</td><td>" + esc(a.note) + "</td></tr>";
+    }).join("");
+    table = "<table><thead><tr><th>门店</th><th>商品</th><th class=\"num\">今日销量</th><th class=\"num\">日均</th><th>处理</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  } else if (state.alertTab === "expiry") {
+    const rows = EXP.map((a) => {
+      const sku = SKUS[a.sku];
+      return "<tr><td>" + esc(STORES[a.store].name) + "</td><td>" + esc(sku.name) + "</td><td class=\"num\">" + a.expiring + " " + esc(sku.unit) + "</td><td class=\"num\">" + a.daysLeft + " 天</td><td>日均 " + n1(a.daily) + "，大约 " + n1(a.expiring / a.daily) + " 天能卖完。建议堆头，不要补货。</td></tr>";
+    }).join("");
+    table = "<table><thead><tr><th>门店</th><th>商品</th><th class=\"num\">临期数量</th><th class=\"num\">剩余到期</th><th>建议</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  } else {
+    const rows = STORE_ORDER.filter((id) => STORES[id].stale >= 21).map((id) => "<tr><td>" + esc(STORES[id].name) + "</td><td class=\"num\">" + STORES[id].stale + " 天</td><td>超储和调出数量以实盘为准。老城店维达抽纸的调拨，出库前先盘点。</td></tr>").join("");
+    table = "<table><thead><tr><th>门店</th><th class=\"num\">距上次盘点</th><th>影响</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+  return '<div class="tabs">' + bar + '</div><div class="panel">' + table + "</div>";
+}
+
+function storeSections(storeId, plans) {
+  const sections = [];
+  const outbound = plans.filter((p) => p.source === "transfer" && p.from === storeId);
+  const inbound = plans.filter((p) => p.store === storeId && p.source === "transfer");
+  const orders = plans.filter((p) => p.store === storeId && (p.source === "dc" || p.source === "supplier"));
+  const covered = plans.filter((p) => p.store === storeId && p.source === "covered");
+  if (outbound.length) {
+    sections.push({
+      title: "待确认调出",
+      rows: outbound.map((p) => ({
+        id: p.id,
+        title: p.sku.name,
+        tag: statusMeta(p)[0],
+        tone: statusMeta(p)[1],
+        text: "调给" + STORES[p.store].name + " " + n0(p.execQty) + p.sku.unit + "。调出前可售 " + n1(p.fromDosBefore) + " 天，调出后 " + n1(p.fromDosAfter) + " 天。",
+        editable: true,
+        p
+      }))
+    });
+  }
+  if (inbound.length) {
+    sections.push({
+      title: "今日调入",
+      rows: inbound.map((p) => ({
+        id: p.id,
+        title: p.sku.name,
+        tag: "从" + STORES[p.from].name,
+        tone: "",
+        text: "你店可售 " + n1(p.dos) + " 天。调入 " + n0(p.execQty) + p.sku.unit + "。" + (p.status === "confirmed" ? "总部状态：已确认。" : "确认本店收得下。"),
+        editable: true,
+        p
+      }))
+    });
+  }
+  if (orders.length) {
+    sections.push({
+      title: "总仓 / 直送",
+      rows: orders.map((p) => ({
+        id: p.id,
+        title: p.sku.name,
+        tag: p.blocked ? "总仓不足" : sourceName(p),
+        tone: p.blocked ? "bad" : "warn",
+        text: p.blocked
+          ? "需求取整 " + n0(p.suggest) + p.sku.unit + "，总仓分完后本店是 0。先用现货顶 " + n1(p.dos) + " 天。"
+          : "建议执行 " + n0(p.execQty) + p.sku.unit + "。在店可售 " + n1(p.dos) + " 天。",
+        editable: !p.blocked,
+        p
+      }))
+    });
+  }
+  if (covered.length) {
+    sections.push({
+      title: "今天不必补",
+      rows: covered.map((p) => ({
+        id: p.id,
+        title: p.sku.name,
+        tag: "在途已覆盖",
+        tone: "ok",
+        text: "在店 " + n0(p.sellable) + "，在途 " + n0(p.transit) + "，含在途可售 " + n1(p.dosAll) + " 天，已高于目标 " + n1(p.targetQty) + p.sku.unit + "。",
+        editable: false,
+        p
+      }))
+    });
+  }
+  const alerts = [];
+  OVER.filter((o) => o.store === storeId).forEach((o) => {
+    const sku = SKUS[o.sku];
+    const dos = o.onHand / o.daily;
+    if (outbound.some((p) => p.sku.id === o.sku)) return;
+    alerts.push(sku.name + " 可售 " + n1(dos) + " 天，金额 " + money(o.onHand * sku.price) + "。" + (dos >= 60 ? "滞销，先清后进。" : "刚过超储线。"));
+  });
+  ANOM.filter((a) => a.store === storeId).forEach((a) => {
+    const sku = SKUS[a.sku];
+    alerts.push(sku.name + " 今日卖了 " + a.today + sku.unit + "，日均 " + n1(a.daily) + "。" + a.note);
+  });
+  EXP.filter((a) => a.store === storeId).forEach((a) => {
+    const sku = SKUS[a.sku];
+    alerts.push(sku.name + " 有 " + a.expiring + sku.unit + " 将在 " + a.daysLeft + " 天内到期。大约 " + n1(a.expiring / a.daily) + " 天能卖完，建议堆头，不要补货。");
+  });
+  if (STORES[storeId].stale >= 21) {
+    alerts.push("本店已 " + STORES[storeId].stale + " 天没有盘点。调出数量以实盘为准。");
+  }
+  if (alerts.length) {
+    sections.push({ title: "本店预警", rows: alerts.map((text) => ({ title: "", tag: "", text, editable: false })) });
+  }
+  return sections;
+}
+
+function pageStore(plans) {
+  const id = state.managerStore;
+  const options = STORE_ORDER.map((sid) => '<option value="' + sid + '"' + (sid === id ? " selected" : "") + ">" + esc(STORES[sid].name) + "</option>").join("");
+  const sections = storeSections(id, plans).map((sec) => {
+    const rows = sec.rows.map((r) => {
+      const head = r.title
+        ? '<div class="task-top"><strong>' + esc(r.title) + "</strong>" + (r.tag ? pill(r.tag, r.tone) : "") + "</div>"
+        : "";
+      const edit = r.editable
+        ? '<div class="row-actions"><input class="qty" data-qty="' + r.id + '" type="number" min="0" max="' + r.p.stepMax + '" step="' + r.p.sku.case + '" value="' + shownQty(r.p) + '"' + (r.p.stepMax === 0 && r.p.status !== "hold" ? " disabled" : "") + '><button class="btn primary small" data-act="confirm" data-id="' + r.id + '">确认</button><button class="btn small" data-act="hold" data-id="' + r.id + '">暂缓</button></div>'
+        : "";
+      return '<div class="task">' + head + "<p>" + esc(r.text) + "</p>" + edit + "</div>";
+    }).join("");
+    return "<h3 style=\"margin-top:14px\">" + esc(sec.title) + "</h3>" + rows;
+  }).join("");
+  return '<div class="stage"><div class="guide"><strong>讲解时切换门店</strong><select class="store-pick" data-role="manager-store">' + options + '</select><p class="muted">店长只处理本店的调出、调入和要货。改数量或暂缓后，回到补货建议，总部看到的是同一条。</p><ol><li>大学城店：调入农夫山泉、康师傅，并确认可口可乐。</li><li>人民路店：确认调出。这是富余店。</li><li>高铁站店：可口可乐分配为 0。把大学城的可乐暂缓后，再回来看，货会让过来。</li><li>滨江店：酸奶临期，系统建议卖，不建议进。</li><li>老城店：调出抽纸前先盘点。</li></ol></div>'
+    + '<div class="phone"><div class="phone-bar"><span>11:40</span><span>' + esc(STORES[id].name) + " · " + esc(STORES[id].region) + '</span></div><div class="phone-scroll"><p style="margin-top:12px"><strong>今日要处理</strong></p><p class="muted">截单 14:00 前确认。只显示本店。</p>' + sections + "</div></div></div>";
+}
+
+function pageParams() {
+  const rows = CATS.map((cat) => {
+    const cfg = state.config[cat];
+    return "<tr><td>" + esc(cat) + "</td><td><input class=\"qty\" data-cfg=\"" + esc(cat) + "|lead\" type=\"number\" min=\"0\" max=\"30\" value=\"" + cfg.lead + "\"></td><td><input class=\"qty\" data-cfg=\"" + esc(cat) + "|safety\" type=\"number\" min=\"0\" max=\"30\" value=\"" + cfg.safety + "\"></td><td class=\"num\">" + (cfg.lead + cfg.safety) + " 天</td></tr>";
+  }).join("");
+  const cases = Object.keys(SKUS).map((id) => {
+    const sku = SKUS[id];
+    return "<tr><td>" + esc(sku.name) + "</td><td>" + esc(sku.cat) + "</td><td class=\"num\">" + sku.case + " " + esc(sku.unit) + "</td></tr>";
+  }).join("");
+  return '<p class="sub" style="margin-bottom:10px">目标天数 = 配送周期 + 安全天数。保存后，今日建议量、调拨量和总仓分配会重算。超储线 21 天、滞销线 60 天、调出保底 14 天，演示里先固定。</p>'
+    + '<div class="panel"><table><thead><tr><th>品类</th><th>配送周期（天）</th><th>安全天数</th><th class="num">目标覆盖</th></tr></thead><tbody>' + rows + '</tbody></table><div class="pad"><button class="btn primary" data-act="save-config">保存并重算今日建议</button></div></div>'
+    + '<h2>箱规</h2><div class="panel"><table><thead><tr><th>商品</th><th>品类</th><th class="num">箱规</th></tr></thead><tbody>' + cases + "</tbody></table></div>"
+    + '<h2>二期再打开</h2><div class="panel"><div class="pad"><p>档期系数：周末、促销按品类乘到日均上。一期日均不含这层系数。</p><p style="margin-top:8px">新品前 14 天不判滞销。活动锁库存不参与总仓分配。</p></div></div>';
+}
+
+function pageList() {
+  const phases = ["一期", "二期"];
+  const blocks = phases.map((phase) => {
+    const items = FEATURES.filter((f) => f[0] === phase);
+    const modules = [];
+    items.forEach((f) => { if (modules.indexOf(f[1]) < 0) modules.push(f[1]); });
+    const body = modules.map((mod) => {
+      const rows = items.filter((f) => f[1] === mod).map((f) => {
+        const open = f[4]
+          ? '<button class="linkish" data-go="' + f[4] + '">打开</button>'
+          : (phase === "一期" ? "实施项" : "二期");
+        return "<tr><td>" + esc(f[2]) + "</td><td>" + esc(f[3]) + "</td><td>" + esc(f[5]) + "</td><td>" + open + "</td></tr>";
+      }).join("");
+      return '<div class="mod"><h3>' + esc(mod) + '</h3><div class="panel"><table><thead><tr><th>功能</th><th>谁用</th><th>说明</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></div>";
+    }).join("");
+    return "<h2>" + phase + " · " + items.length + " 项</h2>" + body;
+  }).join("");
+  return '<div class="flow"><button class="btn" data-go="matrix">看可售天数</button><span>→</span><button class="btn" data-go="transfer">先调拨</button><span>→</span><button class="btn" data-go="replenish">再分总仓</button><span>→</span><button class="btn" data-go="store">店长确认</button><span>→</span><button class="btn" data-go="replenish" data-act="export">导出草稿</button></div>'
+    + '<p class="muted">口径：在店可售天数 =（账面 − 占用）÷ 日均，不含在途。建议量会再减去在途。日均不含未结束的当天，也剔除异常日。演示日是 2026-10-09，连锁 8 家店。</p>'
+    + blocks;
+}
+
+function exportLines(plans) {
+  const confirmed = plans.filter((p) => p.status === "confirmed" && p.execQty > 0);
+  if (confirmed.length) return { title: "已确认，可以交给进销存", lines: confirmed };
+  return { title: "还没有确认行。下面是今天可执行的草稿", lines: plans.filter((p) => p.status === "pending" && p.execQty > 0) };
+}
+
+function modal(plans) {
+  const pack = exportLines(plans);
+  const rows = pack.lines.map((p) => {
+    const who = p.source === "transfer" ? STORES[p.from].name : (p.source === "dc" ? "总仓" : "供应商");
+    return "<tr><td>" + esc(sourceName(p)) + "</td><td>" + esc(STORES[p.store].name) + "</td><td>" + esc(p.sku.name) + "</td><td class=\"num\">" + n0(p.execQty) + " " + esc(p.sku.unit) + "</td><td>" + esc(who) + "</td><td class=\"num\">" + money(p.execQty * p.sku.price) + "</td></tr>";
+  }).join("");
+  const total = pack.lines.reduce((s, p) => s + p.execQty * p.sku.price, 0);
+  return '<div class="mask"><div class="sheet"><div class="pad headrow"><div><strong>10 月 9 日配货草稿</strong><div class="muted">' + esc(pack.title) + '</div></div><button class="btn small" data-act="close-modal">关闭</button></div><table><thead><tr><th>方式</th><th>门店</th><th>商品</th><th class="num">数量</th><th>来源</th><th class="num">金额</th></tr></thead><tbody>' + rows + '</tbody></table><div class="pad">合计 ' + pack.lines.length + " 行 · " + money(total) + "</div></div></div>";
+}
+
+const TITLES = {
+  home: ["今日总览", "鲜邻生活 · 8 家店 · 2026-10-09 周五 · 日配截单 14:00 · 演示时点 11:40"],
+  replenish: ["补货建议", "执行量已按箱规、总仓现货和调出店 14 天保底算过。确认后进入配货草稿。"],
+  transfer: ["店间调拨", "富余店补缺口店。调出后仍留下至少 14 天用量。"],
+  matrix: ["门店可售", "数字是品类内最短在店可售天数。低于 2 天先处理，在途不进这个格子。"],
+  alerts: ["预警中心", "缺货、超储、异常销量、临期、未盘点分五类处理。"],
+  store: ["店长端", "右侧是店长手机。左侧切换门店只属于原型讲解，店长登录后只固定在本店。"],
+  params: ["参数", "改安全天数或配送周期后重算。箱规来自商品主数据。"],
+  list: ["功能清单", "一期可以写进合同。二期留作增购。点「打开」进对应界面。"]
+};
+
+function layout(plans) {
+  if (state.screen === "replenish" && state.selected == null) state.selected = "t1";
+  if (state.screen === "matrix" && state.cell == null) state.cell = "dxc|饮料";
+  const pending = plans.filter((p) => p.status === "pending" && p.execQty > 0).length;
+  const title = TITLES[state.screen];
+  const nav = [
+    ["工作", [["home", "总览"], ["replenish", "补货建议", pending], ["transfer", "店间调拨"], ["matrix", "门店可售"], ["alerts", "预警中心"]]],
+    ["现场", [["store", "店长端"]]],
+    ["范围", [["params", "参数"], ["list", "功能清单"]]]
+  ].map(([label, items]) => {
+    const buttons = items.map(([id, name, badge]) => '<button class="nav' + (state.screen === id ? " on" : "") + '" data-go="' + id + '"><span>' + name + "</span>" + (badge ? '<span class="badge">' + badge + "</span>" : "") + "</button>").join("");
+    return '<div class="nav-label">' + label + "</div>" + buttons;
+  }).join("");
+  const pages = { home: pageHome, replenish: pageReplenish, transfer: pageTransfer, matrix: pageMatrix, alerts: pageAlerts, store: pageStore, params: pageParams, list: pageList };
+  const exportBtn = (state.screen === "home" || state.screen === "replenish")
+    ? '<button class="btn primary" data-act="export">配货草稿</button>'
+    : "";
+  return '<div class="shell"><aside class="side"><div class="brand"><strong>链存</strong><span>连锁补货预警</span></div><nav>' + nav + '</nav><div class="foot">演示数据<br>鲜邻生活 8 店</div></aside><main class="workspace"><header class="top"><div><h1>' + title[0] + '</h1><p class="sub">' + title[1] + '</p></div><div class="actions">' + exportBtn + "</div></header><div class=\"page\">" + pages[state.screen](plans) + "</div></main></div>"
+    + (state.modal ? modal(plans) : "")
+    + (state.toast ? '<div class="toast">' + esc(state.toast) + "</div>" : "");
+}
+
+function render() {
+  document.getElementById("app").innerHTML = layout(build());
+}
+
+function decide(id, status) {
+  const plan = build().find((p) => p.id === id);
+  if (!plan || plan.source === "covered") return;
+  if (status === "confirmed" && plan.stepMax === 0) {
+    state.toast = "当前没有可分配数量";
+    return;
+  }
+  const input = document.querySelector('[data-qty="' + id + '"]');
+  let qty = input ? Number(input.value) : plan.stored;
+  if (!Number.isFinite(qty) || qty < 0) qty = plan.suggest;
+  const caseSize = plan.sku.case;
+  qty = Math.floor(qty / caseSize) * caseSize;
+  if (status === "hold" || qty === 0) {
+    state.decisions[id] = { status: "hold", qty: qty || plan.suggest };
+    state.toast = "已暂缓。占用的总仓或可调数量已释放";
+    return;
+  }
+  const max = plan.stepMax;
+  let note = "";
+  if (qty > max) {
+    qty = max;
+    note = "，已按可分配上限改为 " + n0(qty);
+  }
+  state.decisions[id] = { status: "confirmed", qty: qty };
+  state.toast = "已确认，并写进配货草稿" + note;
+}
+
+document.getElementById("app").addEventListener("click", (e) => {
+  if (e.target.classList && e.target.classList.contains("mask")) {
+    state.modal = false;
+    state.toast = "";
+    render();
+    return;
+  }
+  const el = e.target.closest("[data-act],[data-go],[data-open],[data-filter],[data-cell],[data-tab]");
+  if (!el) return;
+  state.toast = "";
+  if (el.dataset.filter) state.filter = el.dataset.filter;
+  if (el.dataset.cell) state.cell = el.dataset.cell;
+  if (el.dataset.tab && el.dataset.go !== "alerts" && !el.dataset.go) state.alertTab = el.dataset.tab;
+  if (el.dataset.go) {
+    state.screen = el.dataset.go;
+    if (el.dataset.tab) state.alertTab = el.dataset.tab;
+    if (state.screen !== "replenish") state.selected = null;
+  }
+  if (el.dataset.open) {
+    state.screen = "replenish";
+    state.selected = el.dataset.open;
+    state.filter = "todo";
+  }
+  if (el.dataset.act === "export") state.modal = true;
+  if (el.dataset.act === "close-modal") state.modal = false;
+  if (el.dataset.act === "close-drawer") state.selected = false;
+  if (el.dataset.act === "confirm") decide(el.dataset.id, "confirmed");
+  if (el.dataset.act === "hold") decide(el.dataset.id, "hold");
+  if (el.dataset.act === "reset") {
+    delete state.decisions[el.dataset.id];
+    state.toast = "已恢复系统建议";
+  }
+  if (el.dataset.act === "save-config") {
+    document.querySelectorAll("[data-cfg]").forEach((input) => {
+      const pair = input.dataset.cfg.split("|");
+      const v = Number(input.value);
+      if (Number.isFinite(v) && v >= 0 && v <= 30) state.config[pair[0]][pair[1]] = v;
+    });
+    state.toast = "已按新的配送周期和安全天数重算今日建议";
+  }
+  render();
+});
+
+document.getElementById("app").addEventListener("change", (e) => {
+  if (e.target.dataset.role === "manager-store") {
+    state.managerStore = e.target.value;
+    render();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && state.modal) {
+    state.modal = false;
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
